@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -171,6 +172,8 @@ type formData struct {
 	Keywords []string
 	City     string
 	District string
+	CityOptions        []string
+	DistrictByCityJSON template.JS
 	Language string
 	Zoom     int
 	FastMode bool
@@ -248,6 +251,17 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		GeoJSONKeepNoCoords: false,
 		Depth:    10,
 		Email:    false,
+		DistrictByCityJSON: template.JS(`{}`), //nolint:gosec // static default JSON literal.
+	}
+
+	cityOptions, districtByCity, err := s.locationOptions()
+	if err == nil {
+		data.CityOptions = cityOptions
+
+		raw, marshalErr := json.Marshal(districtByCity)
+		if marshalErr == nil {
+			data.DistrictByCityJSON = template.JS(raw) //nolint:gosec // trusted server-side generated JSON.
+		}
 	}
 
 	_ = tmpl.Execute(w, data)
@@ -464,6 +478,63 @@ func slugifyTR(s string) string {
 	s = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(s, "-")
 
 	return strings.Trim(s, "-")
+}
+
+func (s *Server) locationOptions() ([]string, map[string][]string, error) {
+	base := filepath.Join(s.svc.dataFolder, "geojson", "tr", "ilce")
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cities := make([]string, 0, len(entries))
+	districtByCity := make(map[string][]string, len(entries))
+
+	for _, cityDir := range entries {
+		if !cityDir.IsDir() {
+			continue
+		}
+
+		citySlug := cityDir.Name()
+		cityLabel := labelFromSlug(citySlug)
+		cities = append(cities, cityLabel)
+
+		cityPath := filepath.Join(base, citySlug)
+		districtEntries, dirErr := os.ReadDir(cityPath)
+		if dirErr != nil {
+			continue
+		}
+
+		districts := make([]string, 0, len(districtEntries))
+		for _, d := range districtEntries {
+			if d.IsDir() || filepath.Ext(d.Name()) != ".geojson" {
+				continue
+			}
+
+			districtSlug := strings.TrimSuffix(d.Name(), ".geojson")
+			districts = append(districts, labelFromSlug(districtSlug))
+		}
+
+		sort.Strings(districts)
+		districtByCity[cityLabel] = districts
+	}
+
+	sort.Strings(cities)
+
+	return cities, districtByCity, nil
+}
+
+func labelFromSlug(slug string) string {
+	parts := strings.Split(slug, "-")
+	for i := range parts {
+		if parts[i] == "" {
+			continue
+		}
+
+		parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+	}
+
+	return strings.Join(parts, " ")
 }
 
 func (s *Server) getJobs(w http.ResponseWriter, r *http.Request) {
