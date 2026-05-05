@@ -63,7 +63,7 @@
                             <label for="output_fields">CSV output fields (optional, Ctrl/Cmd + click multiple):</label>
                             <select id="output_fields" name="output_fields" multiple size="10">
                                 {{range .OutputFieldOptions}}
-                                <option value="{{.}}">{{.}}</option>
+                                <option value="{{.Value}}">{{.Label}}</option>
                                 {{end}}
                             </select>
                             <small>Empty selection = all fields (default behavior)</small>

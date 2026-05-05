@@ -175,7 +175,7 @@ type formData struct {
 	District string
 	CityOptions        []string
 	DistrictByCityJSON template.JS
-	OutputFieldOptions []string
+	OutputFieldOptions []outputFieldOption
 	Language string
 	Zoom     int
 	FastMode bool
@@ -266,7 +266,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data.OutputFieldOptions = (&gmaps.Entry{}).CsvHeaders()
+	data.OutputFieldOptions = buildOutputFieldOptions()
 
 	_ = tmpl.Execute(w, data)
 }
@@ -548,6 +548,67 @@ func labelFromSlug(slug string) string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+type outputFieldOption struct {
+	Value string
+	Label string
+}
+
+func buildOutputFieldOptions() []outputFieldOption {
+	headers := (&gmaps.Entry{}).CsvHeaders()
+
+	labels := map[string]string{
+		"input_id":              "Input ID (Sorgu Kimligi)",
+		"link":                  "Google Maps Link",
+		"title":                 "Yer Adi",
+		"category":              "Kategori",
+		"address":               "Adres (Kisa)",
+		"open_hours":            "Calisma Saatleri",
+		"popular_times":         "Yogunluk Saatleri",
+		"website":               "Web Sitesi",
+		"phone":                 "Telefon",
+		"plus_code":             "Plus Code",
+		"review_count":          "Yorum Sayisi",
+		"review_rating":         "Puan Ortalamasi",
+		"reviews_per_rating":    "Yildiz Dagilimi",
+		"latitude":              "Enlem (Latitude)",
+		"longitude":             "Boylam (Longitude)",
+		"cid":                   "CID",
+		"status":                "Durum",
+		"descriptions":          "Aciklama",
+		"reviews_link":          "Yorumlar Linki",
+		"thumbnail":             "Kapak Gorseli",
+		"timezone":              "Saat Dilimi",
+		"price_range":           "Fiyat Araligi",
+		"data_id":               "Data ID",
+		"place_id":              "Place ID",
+		"images":                "Gorseller",
+		"reservations":          "Rezervasyon Linkleri",
+		"order_online":          "Online Siparis Linkleri",
+		"menu":                  "Menu Linki",
+		"owner":                 "Isletme Sahibi",
+		"complete_address":      "Adres (Detayli)",
+		"about":                 "Hakkinda",
+		"user_reviews":          "Kullanici Yorumlari",
+		"user_reviews_extended": "Kullanici Yorumlari (Detayli)",
+		"emails":                "E-Posta",
+	}
+
+	out := make([]outputFieldOption, 0, len(headers))
+	for _, h := range headers {
+		label, ok := labels[h]
+		if !ok {
+			label = h
+		}
+
+		out = append(out, outputFieldOption{
+			Value: h,
+			Label: label,
+		})
+	}
+
+	return out
 }
 
 func (s *Server) getJobs(w http.ResponseWriter, r *http.Request) {
