@@ -50,6 +50,9 @@ func New(cfg *runner.Config) (runner.Runner, error) {
 	}
 
 	svc := web.NewService(repo, cfg.DataFolder)
+	if err := svc.EnsureGeoJSONData(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to prepare location geojson data: %w", err)
+	}
 
 	srv, err := web.New(svc, cfg.Addr)
 	if err != nil {
