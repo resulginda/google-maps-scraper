@@ -101,6 +101,14 @@ main {
     background-color: var(--color-background);
 }
 
+.job-table-hint {
+    font-size: 0.875rem;
+    color: var(--color-text-light);
+    margin: 0 0 16px;
+    max-width: 52rem;
+    line-height: 1.45;
+}
+
 form {
     display: flex;
     flex-direction: column;

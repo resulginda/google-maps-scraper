@@ -161,6 +161,7 @@
             </div>
             <div class="content">
                 <div id="spinner" class="spinner"></div>
+                <p class="job-table-hint">Status stays <strong>working</strong> until the whole run finishes (all queued searches and place pages), not when a single log line says &quot;job finished&quot;. This table reloads every 10 seconds.</p>
                 <table id="job-table">
                     <thead>
                         <tr>
@@ -171,7 +172,7 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody hx-get="/jobs" hx-trigger="load, every 10s">
+                    <tbody hx-get="/jobs" hx-trigger="load, every 5s">
                         <!-- Job rows will be inserted here by HTMX -->
                     </tbody>
                 </table>

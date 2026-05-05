@@ -152,6 +152,11 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) error {
 
 	outfile, err := os.Create(outpath)
 	if err != nil {
+		job.Status = web.StatusFailed
+		if err2 := w.svc.Update(ctx, job); err2 != nil {
+			log.Printf("failed to update job status: %v", err2)
+		}
+
 		return err
 	}
 
@@ -201,8 +206,8 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) error {
 		w.cfg.ExtraReviews || job.Data.ExtraReviews,
 	)
 	if err != nil {
-		err2 := w.svc.Update(ctx, job)
-		if err2 != nil {
+		job.Status = web.StatusFailed
+		if err2 := w.svc.Update(ctx, job); err2 != nil {
 			log.Printf("failed to update job status: %v", err2)
 		}
 
@@ -235,8 +240,8 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) error {
 		if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 			cancel()
 
-			err2 := w.svc.Update(ctx, job)
-			if err2 != nil {
+			job.Status = web.StatusFailed
+			if err2 := w.svc.Update(ctx, job); err2 != nil {
 				log.Printf("failed to update job status: %v", err2)
 			}
 
