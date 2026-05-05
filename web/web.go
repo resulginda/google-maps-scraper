@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gosom/google-maps-scraper/gmaps"
 	"github.com/google/uuid"
 )
 
@@ -174,6 +175,7 @@ type formData struct {
 	District string
 	CityOptions        []string
 	DistrictByCityJSON template.JS
+	OutputFieldOptions []string
 	Language string
 	Zoom     int
 	FastMode bool
@@ -264,6 +266,8 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	data.OutputFieldOptions = (&gmaps.Entry{}).CsvHeaders()
+
 	_ = tmpl.Execute(w, data)
 }
 
@@ -327,6 +331,15 @@ func (s *Server) scrape(w http.ResponseWriter, r *http.Request) {
 	newJob.Data.District = strings.TrimSpace(r.Form.Get("district"))
 	newJob.Data.GeoJSONPath = strings.TrimSpace(r.Form.Get("geojson_path"))
 	newJob.Data.GeoJSONKeepNoCoords = r.Form.Get("geojson_keep_no_coords") == "on"
+	if fields, ok := r.Form["output_fields"]; ok {
+		for _, f := range fields {
+			f = strings.TrimSpace(f)
+			if f == "" {
+				continue
+			}
+			newJob.Data.OutputFields = append(newJob.Data.OutputFields, f)
+		}
+	}
 
 	if newJob.Data.District != "" && newJob.Data.City == "" {
 		http.Error(w, "district requires city", http.StatusUnprocessableEntity)

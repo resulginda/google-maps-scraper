@@ -60,6 +60,15 @@
                             <textarea id="keywords" name="keywords" rows="10">{{ .KeywordsString }}</textarea>
                         </div>
                         <div class="form-group">
+                            <label for="output_fields">CSV output fields (optional, Ctrl/Cmd + click multiple):</label>
+                            <select id="output_fields" name="output_fields" multiple size="10">
+                                {{range .OutputFieldOptions}}
+                                <option value="{{.}}">{{.}}</option>
+                                {{end}}
+                            </select>
+                            <small>Empty selection = all fields (default behavior)</small>
+                        </div>
+                        <div class="form-group">
                             <label for="lang">Language:</label>
                             <input type="text" id="lang" name="lang" value="{{.Language}}">
                         </div>

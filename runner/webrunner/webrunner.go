@@ -290,7 +290,13 @@ func (w *webrunner) setupMate(_ context.Context, writer io.Writer, job *web.Job)
 
 	log.Printf("job %s has proxy: %v", job.ID, hasProxy)
 
-	csvWriter := csvwriter.NewCsvWriter(csv.NewWriter(writer))
+	cw := csv.NewWriter(writer)
+	var csvWriter scrapemate.ResultWriter
+	if len(job.Data.OutputFields) > 0 {
+		csvWriter = newSelectiveCSVWriter(cw, job.Data.OutputFields)
+	} else {
+		csvWriter = csvwriter.NewCsvWriter(cw)
+	}
 
 	writers := []scrapemate.ResultWriter{csvWriter}
 

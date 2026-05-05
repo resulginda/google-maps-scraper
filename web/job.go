@@ -64,6 +64,7 @@ type JobData struct {
 	Keywords     []string      `json:"keywords"`
 	City         string        `json:"city"`
 	District     string        `json:"district"`
+	OutputFields []string      `json:"output_fields"`
 	Lang         string        `json:"lang"`
 	Zoom         int           `json:"zoom"`
 	Lat          string        `json:"lat"`
