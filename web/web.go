@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -168,12 +169,16 @@ type formData struct {
 	Name     string
 	MaxTime  string
 	Keywords []string
+	City     string
+	District string
 	Language string
 	Zoom     int
 	FastMode bool
 	Radius   int
 	Lat      string
 	Lon      string
+	GeoJSONPath         string
+	GeoJSONKeepNoCoords bool
 	Depth    int
 	Email    bool
 	Proxies  []string
@@ -231,12 +236,16 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		Name:     "",
 		MaxTime:  "10m",
 		Keywords: []string{},
+		City:     "",
+		District: "",
 		Language: "en",
 		Zoom:     15,
 		FastMode: false,
 		Radius:   10000,
 		Lat:      "0",
 		Lon:      "0",
+		GeoJSONPath: "",
+		GeoJSONKeepNoCoords: false,
 		Depth:    10,
 		Email:    false,
 	}
@@ -300,6 +309,42 @@ func (s *Server) scrape(w http.ResponseWriter, r *http.Request) {
 		newJob.Data.Keywords = append(newJob.Data.Keywords, k)
 	}
 
+	newJob.Data.City = strings.TrimSpace(r.Form.Get("city"))
+	newJob.Data.District = strings.TrimSpace(r.Form.Get("district"))
+	newJob.Data.GeoJSONPath = strings.TrimSpace(r.Form.Get("geojson_path"))
+	newJob.Data.GeoJSONKeepNoCoords = r.Form.Get("geojson_keep_no_coords") == "on"
+
+	if newJob.Data.District != "" && newJob.Data.City == "" {
+		http.Error(w, "district requires city", http.StatusUnprocessableEntity)
+
+		return
+	}
+
+	if newJob.Data.City != "" || newJob.Data.District != "" {
+		locationSuffix := strings.TrimSpace(strings.Join([]string{
+			newJob.Data.District,
+			newJob.Data.City,
+		}, " "))
+
+		for i := range newJob.Data.Keywords {
+			newJob.Data.Keywords[i] = strings.TrimSpace(strings.Join([]string{
+				newJob.Data.Keywords[i],
+				locationSuffix,
+			}, " "))
+		}
+	}
+
+	if newJob.Data.GeoJSONPath == "" {
+		autoPath, err := s.resolveAutoGeoJSONPath(newJob.Data.City, newJob.Data.District)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+
+			return
+		}
+
+		newJob.Data.GeoJSONPath = autoPath
+	}
+
 	newJob.Data.Lang = r.Form.Get("lang")
 
 	newJob.Data.Zoom, err = strconv.Atoi(r.Form.Get("zoom"))
@@ -322,7 +367,6 @@ func (s *Server) scrape(w http.ResponseWriter, r *http.Request) {
 
 	newJob.Data.Lat = r.Form.Get("latitude")
 	newJob.Data.Lon = r.Form.Get("longitude")
-
 	newJob.Data.Depth, err = strconv.Atoi(r.Form.Get("depth"))
 	if err != nil {
 		http.Error(w, "invalid depth", http.StatusUnprocessableEntity)
@@ -366,6 +410,60 @@ func (s *Server) scrape(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = tmpl.Execute(w, newJob)
+}
+
+func (s *Server) resolveAutoGeoJSONPath(city, district string) (string, error) {
+	city = strings.TrimSpace(city)
+	district = strings.TrimSpace(district)
+
+	if city == "" {
+		return "", nil
+	}
+
+	citySlug := slugifyTR(city)
+
+	if district == "" {
+		p := filepath.Join(s.svc.dataFolder, "geojson", "tr", "il", citySlug+".geojson")
+		if _, err := os.Stat(p); err != nil {
+			if os.IsNotExist(err) {
+				return "", fmt.Errorf("city boundary not found: %s", city)
+			}
+
+			return "", err
+		}
+
+		return filepath.Join("geojson", "tr", "il", citySlug+".geojson"), nil
+	}
+
+	districtSlug := slugifyTR(district)
+	p := filepath.Join(s.svc.dataFolder, "geojson", "tr", "ilce", citySlug, districtSlug+".geojson")
+	if _, err := os.Stat(p); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("district boundary not found: %s / %s", city, district)
+		}
+
+		return "", err
+	}
+
+	return filepath.Join("geojson", "tr", "ilce", citySlug, districtSlug+".geojson"), nil
+}
+
+func slugifyTR(s string) string {
+	replacer := strings.NewReplacer(
+		"Ç", "c", "ç", "c",
+		"Ğ", "g", "ğ", "g",
+		"İ", "i", "I", "i", "ı", "i",
+		"Ö", "o", "ö", "o",
+		"Ş", "s", "ş", "s",
+		"Ü", "u", "ü", "u",
+	)
+
+	s = strings.TrimSpace(replacer.Replace(strings.ToLower(s)))
+	s = strings.ReplaceAll(s, "'", "")
+	s = strings.ReplaceAll(s, "\"", "")
+	s = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(s, "-")
+
+	return strings.Trim(s, "-")
 }
 
 func (s *Server) getJobs(w http.ResponseWriter, r *http.Request) {

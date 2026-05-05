@@ -63,6 +63,14 @@
                             <label for="lang">Language:</label>
                             <input type="text" id="lang" name="lang" value="{{.Language}}">
                         </div>
+                        <div class="form-group">
+                            <label for="city">City (optional):</label>
+                            <input type="text" id="city" name="city" value="{{.City}}" placeholder="Izmir">
+                        </div>
+                        <div class="form-group">
+                            <label for="district">District (optional):</label>
+                            <input type="text" id="district" name="district" value="{{.District}}" placeholder="Urla">
+                        </div>
                     </fieldset>
                     
                     <details class="expandable-section">
@@ -79,6 +87,14 @@
                             <div class="form-group">
                                 <label for="longitude">Longitude:</label>
                                 <input type="number" step="0.000000000000001" id="longitude" name="longitude" value="{{.Lon}}">
+                            </div>
+                            <div class="form-group">
+                                <label for="geojson_path">GeoJSON boundary path (optional):</label>
+                                <input type="text" id="geojson_path" name="geojson_path" value="{{.GeoJSONPath}}" placeholder="/data/urla.geojson">
+                            </div>
+                            <div class="form-group checkbox">
+                                <input type="checkbox" id="geojson_keep_no_coords" name="geojson_keep_no_coords" {{if .GeoJSONKeepNoCoords}}checked{{end}}>
+                                <label for="geojson_keep_no_coords">Keep entries without coordinates</label>
                             </div>
                         </fieldset>
                     </details>

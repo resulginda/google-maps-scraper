@@ -14,6 +14,7 @@ import (
 
 	"github.com/gosom/google-maps-scraper/deduper"
 	"github.com/gosom/google-maps-scraper/exiter"
+	"github.com/gosom/google-maps-scraper/geojsonfilter"
 	"github.com/gosom/google-maps-scraper/runner"
 	"github.com/gosom/google-maps-scraper/tlmt"
 	"github.com/gosom/google-maps-scraper/web"
@@ -289,7 +290,24 @@ func (w *webrunner) setupMate(_ context.Context, writer io.Writer, job *web.Job)
 	csvWriter := csvwriter.NewCsvWriter(csv.NewWriter(writer))
 
 	writers := []scrapemate.ResultWriter{csvWriter}
-	writers = runner.WrapWritersWithGeoJSON(w.cfg, writers)
+
+	cfgCopy := *w.cfg
+	if strings.TrimSpace(job.Data.GeoJSONPath) != "" {
+		geoJSONPath := strings.TrimSpace(job.Data.GeoJSONPath)
+		if !filepath.IsAbs(geoJSONPath) {
+			geoJSONPath = filepath.Join(w.cfg.DataFolder, geoJSONPath)
+		}
+
+		f, err := geojsonfilter.LoadFile(geoJSONPath)
+		if err != nil {
+			return nil, fmt.Errorf("invalid geojson filter path %q: %w", geoJSONPath, err)
+		}
+
+		cfgCopy.GeoJSONFilter = f
+		cfgCopy.GeoJSONIncludeNoCoords = job.Data.GeoJSONKeepNoCoords
+	}
+
+	writers = runner.WrapWritersWithGeoJSON(&cfgCopy, writers)
 
 	matecfg, err := scrapemateapp.NewConfig(
 		writers,
