@@ -97,7 +97,7 @@
                             </div>
                             <div class="form-group">
                                 <label for="geojson_path">GeoJSON boundary path (optional):</label>
-                                <input type="text" id="geojson_path" name="geojson_path" value="{{.GeoJSONPath}}" placeholder="/data/urla.geojson">
+                                <input type="text" id="geojson_path" name="geojson_path" value="{{.GeoJSONPath}}" placeholder="auto from city/district">
                             </div>
                             <div class="form-group checkbox">
                                 <input type="checkbox" id="geojson_keep_no_coords" name="geojson_keep_no_coords" {{if .GeoJSONKeepNoCoords}}checked{{end}}>
@@ -180,6 +180,23 @@ function hideSponsor() {
 
 const districtByCity = {{.DistrictByCityJSON}};
 const initialDistrict = "{{.District}}";
+const initialGeoJSONPath = "{{.GeoJSONPath}}";
+
+function slugifyTR(input) {
+    return input
+        .toLowerCase()
+        .replaceAll("ç", "c")
+        .replaceAll("ğ", "g")
+        .replaceAll("ı", "i")
+        .replaceAll("i̇", "i")
+        .replaceAll("ö", "o")
+        .replaceAll("ş", "s")
+        .replaceAll("ü", "u")
+        .replaceAll("'", "")
+        .replaceAll('"', "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+}
 
 function fillDistrictsForCity() {
     const citySelect = document.getElementById('city');
@@ -206,13 +223,42 @@ function fillDistrictsForCity() {
     }
 }
 
+function updateGeoJSONPath() {
+    const city = document.getElementById('city').value;
+    const district = document.getElementById('district').value;
+    const geojsonInput = document.getElementById('geojson_path');
+
+    if (!city) {
+        geojsonInput.value = "";
+        return;
+    }
+
+    const citySlug = slugifyTR(city);
+
+    if (district) {
+        const districtSlug = slugifyTR(district);
+        geojsonInput.value = `geojson/tr/ilce/${citySlug}/${districtSlug}.geojson`;
+        return;
+    }
+
+    geojsonInput.value = `geojson/tr/il/${citySlug}.geojson`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const citySelect = document.getElementById('city');
+    const districtSelect = document.getElementById('district');
     fillDistrictsForCity();
+    if (initialGeoJSONPath) {
+        document.getElementById('geojson_path').value = initialGeoJSONPath;
+    } else {
+        updateGeoJSONPath();
+    }
     citySelect.addEventListener('change', () => {
         document.getElementById('district').value = "";
         fillDistrictsForCity();
+        updateGeoJSONPath();
     });
+    districtSelect.addEventListener('change', updateGeoJSONPath);
 });
 </script>
 </body>
