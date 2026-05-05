@@ -251,8 +251,6 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) error {
 		cancel()
 	}
 
-	mate.Close()
-
 	job.Status = web.StatusOK
 
 	return w.svc.Update(ctx, job)
