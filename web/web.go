@@ -749,6 +749,12 @@ func (s *Server) apiScrape(w http.ResponseWriter, r *http.Request) {
 	// convert to seconds
 	newJob.Data.MaxTime *= time.Second
 
+	if strings.TrimSpace(newJob.Data.GeoJSONPath) == "" {
+		if autoPath, err := s.resolveAutoGeoJSONPath(newJob.Data.City, newJob.Data.District); err == nil {
+			newJob.Data.GeoJSONPath = autoPath
+		}
+	}
+
 	err = newJob.Validate()
 	if err != nil {
 		ans := apiError{

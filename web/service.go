@@ -96,7 +96,7 @@ func (s *Service) EnsureGeoJSONData(ctx context.Context) error {
 		return err
 	}
 
-	client := &http.Client{Timeout: 2 * time.Minute}
+	client := &http.Client{Timeout: 5 * time.Minute}
 
 	if err := s.downloadAndSplitADM1(ctx, client, ilDir); err != nil {
 		return fmt.Errorf("prepare ADM1 geojson failed: %w", err)
@@ -124,7 +124,7 @@ type geoFeature struct {
 func (s *Service) downloadAndSplitADM1(ctx context.Context, client *http.Client, ilDir string) error {
 	var fc geoFeatureCollection
 
-	if err := fetchJSON(ctx, client, turkeyADM1URL, &fc); err != nil {
+	if err := fetchJSONWithRetries(ctx, client, turkeyADM1URL, &fc); err != nil {
 		return err
 	}
 
@@ -151,7 +151,7 @@ func (s *Service) downloadAndSplitADM1(ctx context.Context, client *http.Client,
 func (s *Service) downloadAndSplitADM2(ctx context.Context, client *http.Client, ilceDir string) error {
 	var fc geoFeatureCollection
 
-	if err := fetchJSON(ctx, client, turkeyADM2URL, &fc); err != nil {
+	if err := fetchJSONWithRetries(ctx, client, turkeyADM2URL, &fc); err != nil {
 		return err
 	}
 
@@ -180,6 +180,33 @@ func (s *Service) downloadAndSplitADM2(ctx context.Context, client *http.Client,
 	}
 
 	return nil
+}
+
+func fetchJSONWithRetries(ctx context.Context, client *http.Client, url string, out any) error {
+	const maxAttempts = 5
+
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		lastErr = fetchJSON(ctx, client, url, out)
+		if lastErr == nil {
+			return nil
+		}
+
+		if attempt == maxAttempts {
+			break
+		}
+
+		wait := time.Duration(attempt) * 20 * time.Second
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+
+	return lastErr
 }
 
 func fetchJSON(ctx context.Context, client *http.Client, url string, out any) error {

@@ -20,6 +20,15 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /usr/bin/google-maps-scraper
 
+# Bake Turkey boundaries into the image (avoids runtime TLS timeout to ucdavis.edu).
+FROM builder AS geojson-bake
+WORKDIR /app
+RUN mkdir -p /gmapsdata/geojson/tr/il /gmapsdata/geojson/tr/ilce \
+    && (for i in 1 2 3; do \
+        CGO_ENABLED=0 go run ./scripts/prepare-turkey-geojson/main.go /gmapsdata && exit 0; \
+        echo "geojson bake attempt $i failed, retrying..."; sleep 45; \
+    done; echo "geojson bake skipped — container will retry in background")
+
 # Final stage
 FROM debian:trixie-slim
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
@@ -58,6 +67,7 @@ RUN chmod -R 755 /opt/browsers \
     && chmod -R 755 /opt/ms-playwright-go
 
 COPY --from=builder /usr/bin/google-maps-scraper /usr/bin/
+COPY --from=geojson-bake /gmapsdata/geojson /gmapsdata/geojson
 
 EXPOSE 8080
 

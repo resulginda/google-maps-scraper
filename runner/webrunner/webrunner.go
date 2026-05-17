@@ -50,9 +50,7 @@ func New(cfg *runner.Config) (runner.Runner, error) {
 	}
 
 	svc := web.NewService(repo, cfg.DataFolder)
-	if err := svc.EnsureGeoJSONData(context.Background()); err != nil {
-		return nil, fmt.Errorf("failed to prepare location geojson data: %w", err)
-	}
+	startGeoJSONBackground(svc)
 
 	srv, err := web.New(svc, cfg.Addr)
 	if err != nil {
@@ -66,6 +64,46 @@ func New(cfg *runner.Config) (runner.Runner, error) {
 	}
 
 	return &ans, nil
+}
+
+// Turkey il/ilce boundaries are optional for API jobs; never block the web server on download.
+func startGeoJSONBackground(svc *web.Service) {
+	go func() {
+		delays := []time.Duration{
+			0,
+			30 * time.Second,
+			90 * time.Second,
+			3 * time.Minute,
+			10 * time.Minute,
+		}
+
+		for i, delay := range delays {
+			if delay > 0 {
+				time.Sleep(delay)
+			}
+
+			if err := svc.EnsureGeoJSONData(context.Background()); err == nil {
+				log.Printf("Turkey geojson boundaries ready")
+
+				return
+			} else {
+				log.Printf("geojson prep attempt %d/%d: %v", i+1, len(delays), err)
+			}
+		}
+
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			if err := svc.EnsureGeoJSONData(context.Background()); err == nil {
+				log.Printf("Turkey geojson boundaries ready (delayed)")
+
+				return
+			} else {
+				log.Printf("geojson prep still failing: %v", err)
+			}
+		}
+	}()
 }
 
 func (w *webrunner) Run(ctx context.Context) error {

@@ -1,8 +1,21 @@
 # Kitabe — scrape.kitabe.org deploy
 
+## Durum: logda geojson TLS timeout
+
+```
+failed to prepare location geojson data: ... gadm41_TUR_1.json: TLS handshake timeout
+```
+
+Eski sürümde bu hata **web sunucusunu hiç başlatmıyordu** → Dokploy 502. Güncel sürüm:
+
+- Sunucu **hemen** `:8080`’de açılır
+- İl sınırları imaj build sırasında veya arka planda indirilir
+
+Deploy sonrası logda `visit http://localhost:8080` görmelisiniz.
+
 ## Durum: container çalışıyor, domain 502 veriyorsa
 
-Deploy logunda `visit http://localhost:8080` görüyorsanız **uygulama ayaktadır**. `Bad Gateway` genelde **dış proxy’nin yanlış porta gitmesi** demektir.
+Deploy logunda `visit http://localhost:8080` görüyorsanız **uygulama ayaktadır**. `Bad Gateway` genelde **Dokploy Domains → container port 8080** eksikliğidir (nginx kullanmıyorsanız sadece bu).
 
 | Katman | Port |
 |--------|------|
