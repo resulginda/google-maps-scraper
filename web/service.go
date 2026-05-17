@@ -17,8 +17,10 @@ type Service struct {
 }
 
 const (
-	turkeyADM1URL = "https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_TUR_1.json"
-	turkeyADM2URL = "https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_TUR_2.json"
+	turkeyADM1URL     = "https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_TUR_1.json"
+	turkeyADM2URL     = "https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_TUR_2.json"
+	geoJSONFileExt    = ".geojson"
+	formCheckboxValue = "on"
 )
 
 func NewService(repo JobRepository, dataFolder string) *Service {
@@ -210,7 +212,7 @@ func fetchJSONWithRetries(ctx context.Context, client *http.Client, url string, 
 }
 
 func fetchJSON(ctx context.Context, client *http.Client, url string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -241,7 +243,7 @@ func writeSingleFeatureCollection(path string, feature geoFeature, name string) 
 		return err
 	}
 
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 func hasGeoJSONFiles(dir string) bool {
@@ -258,7 +260,7 @@ func hasGeoJSONFiles(dir string) bool {
 			}
 
 			for _, se := range subEntries {
-				if !se.IsDir() && filepath.Ext(se.Name()) == ".geojson" {
+				if !se.IsDir() && filepath.Ext(se.Name()) == geoJSONFileExt {
 					return true
 				}
 			}
@@ -266,7 +268,7 @@ func hasGeoJSONFiles(dir string) bool {
 			continue
 		}
 
-		if filepath.Ext(e.Name()) == ".geojson" {
+		if filepath.Ext(e.Name()) == geoJSONFileExt {
 			return true
 		}
 	}

@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gosom/google-maps-scraper/gmaps"
 	"github.com/google/uuid"
+	"github.com/gosom/google-maps-scraper/gmaps"
 )
 
 //go:embed static
@@ -168,25 +168,25 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 type formData struct {
-	Name     string
-	MaxTime  string
-	Keywords []string
-	City     string
-	District string
-	CityOptions        []string
-	DistrictByCityJSON template.JS
-	OutputFieldOptions []outputFieldOption
-	Language string
-	Zoom     int
-	FastMode bool
-	Radius   int
-	Lat      string
-	Lon      string
+	Name                string
+	MaxTime             string
+	Keywords            []string
+	City                string
+	District            string
+	CityOptions         []string
+	DistrictByCityJSON  template.JS
+	OutputFieldOptions  []outputFieldOption
+	Language            string
+	Zoom                int
+	FastMode            bool
+	Radius              int
+	Lat                 string
+	Lon                 string
 	GeoJSONPath         string
 	GeoJSONKeepNoCoords bool
-	Depth    int
-	Email    bool
-	Proxies  []string
+	Depth               int
+	Email               bool
+	Proxies             []string
 }
 
 type ctxKey string
@@ -213,12 +213,10 @@ func getIDFromRequest(r *http.Request) (uuid.UUID, bool) {
 	return id, ok
 }
 
-//nolint:gocritic // this is used in template
 func (f formData) ProxiesString() string {
 	return strings.Join(f.Proxies, "\n")
 }
 
-//nolint:gocritic // this is used in template
 func (f formData) KeywordsString() string {
 	return strings.Join(f.Keywords, "\n")
 }
@@ -238,22 +236,22 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := formData{
-		Name:     "",
-		MaxTime:  "10m",
-		Keywords: []string{},
-		City:     "",
-		District: "",
-		Language: "en",
-		Zoom:     15,
-		FastMode: false,
-		Radius:   10000,
-		Lat:      "0",
-		Lon:      "0",
-		GeoJSONPath: "",
+		Name:                "",
+		MaxTime:             "10m",
+		Keywords:            []string{},
+		City:                "",
+		District:            "",
+		Language:            "en",
+		Zoom:                15,
+		FastMode:            false,
+		Radius:              10000,
+		Lat:                 "0",
+		Lon:                 "0",
+		GeoJSONPath:         "",
 		GeoJSONKeepNoCoords: false,
-		Depth:    10,
-		Email:    false,
-		DistrictByCityJSON: template.JS(`{}`), //nolint:gosec // static default JSON literal.
+		Depth:               10,
+		Email:               false,
+		DistrictByCityJSON:  template.JS(`{}`),
 	}
 
 	cityOptions, districtByCity, err := s.locationOptions()
@@ -262,7 +260,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 
 		raw, marshalErr := json.Marshal(districtByCity)
 		if marshalErr == nil {
-			data.DistrictByCityJSON = template.JS(raw) //nolint:gosec // trusted server-side generated JSON.
+			data.DistrictByCityJSON = template.JS(raw) //nolint:gosec // server-generated JSON for location dropdown
 		}
 	}
 
@@ -330,7 +328,7 @@ func (s *Server) scrape(w http.ResponseWriter, r *http.Request) {
 	newJob.Data.City = strings.TrimSpace(r.Form.Get("city"))
 	newJob.Data.District = strings.TrimSpace(r.Form.Get("district"))
 	newJob.Data.GeoJSONPath = strings.TrimSpace(r.Form.Get("geojson_path"))
-	newJob.Data.GeoJSONKeepNoCoords = r.Form.Get("geojson_keep_no_coords") == "on"
+	newJob.Data.GeoJSONKeepNoCoords = r.Form.Get("geojson_keep_no_coords") == formCheckboxValue
 	if fields, ok := r.Form["output_fields"]; ok {
 		for _, f := range fields {
 			f = strings.TrimSpace(f)
@@ -381,7 +379,7 @@ func (s *Server) scrape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Form.Get("fastmode") == "on" {
+	if r.Form.Get("fastmode") == formCheckboxValue {
 		newJob.Data.FastMode = true
 	}
 
@@ -401,7 +399,7 @@ func (s *Server) scrape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newJob.Data.Email = r.Form.Get("email") == "on"
+	newJob.Data.Email = r.Form.Get("email") == formCheckboxValue
 
 	proxies := strings.Split(r.Form.Get("proxies"), "\n")
 	if len(proxies) > 0 {

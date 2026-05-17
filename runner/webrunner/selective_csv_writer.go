@@ -95,4 +95,3 @@ func (s *selectiveCSVWriter) initFromEntry(entry *gmaps.Entry) error {
 
 	return nil
 }
-

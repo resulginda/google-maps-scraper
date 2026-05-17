@@ -2,6 +2,30 @@ run:
   issues-exit-code: 1
   timeout: 3m
 linters-settings:
+  misspell:
+    ignore-words:
+      - Adres
+      - Calisma
+      - Dagilimi
+      - Detayli
+      - Dilimi
+      - Gorsel
+      - Gorseller
+      - Hakkinda
+      - Isletme
+      - Kapak
+      - Kisa
+      - Kullanici
+      - Ortalamasi
+      - Rezervasyon
+      - Saatleri
+      - Sahibi
+      - Sayisi
+      - Siparis
+      - Yogunluk
+      - Yorumlar
+      - Yorumlari
+      - Yildiz
   errcheck:
     check-type-assertions: true
   goconst:
@@ -56,5 +80,14 @@ linters:
     - unconvert
     - unparam
     - whitespace
-    - wsl
 
+issues:
+  exclude-rules:
+    - path: geojsonfilter/
+      linters:
+        - revive
+        - copyloopvar
+        - testpackage
+    - path: web/web\.go
+      linters:
+        - gocritic

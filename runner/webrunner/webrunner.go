@@ -82,26 +82,28 @@ func startGeoJSONBackground(svc *web.Service) {
 				time.Sleep(delay)
 			}
 
-			if err := svc.EnsureGeoJSONData(context.Background()); err == nil {
+			err := svc.EnsureGeoJSONData(context.Background())
+			if err == nil {
 				log.Printf("Turkey geojson boundaries ready")
 
 				return
-			} else {
-				log.Printf("geojson prep attempt %d/%d: %v", i+1, len(delays), err)
 			}
+
+			log.Printf("geojson prep attempt %d/%d: %v", i+1, len(delays), err)
 		}
 
 		ticker := time.NewTicker(15 * time.Minute)
 		defer ticker.Stop()
 
 		for range ticker.C {
-			if err := svc.EnsureGeoJSONData(context.Background()); err == nil {
+			err := svc.EnsureGeoJSONData(context.Background())
+			if err == nil {
 				log.Printf("Turkey geojson boundaries ready (delayed)")
 
 				return
-			} else {
-				log.Printf("geojson prep still failing: %v", err)
 			}
+
+			log.Printf("geojson prep still failing: %v", err)
 		}
 	}()
 }
