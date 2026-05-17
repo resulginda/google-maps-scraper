@@ -1,0 +1,35 @@
+# Push main -> sunucuda docker compose prod (SSH secrets gerekli)
+# GitHub repo Settings -> Secrets:
+#   DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY
+#   DEPLOY_PATH (örn. /opt/google-maps-scraper)
+
+name: Deploy Kitabe Scraper
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.repository == 'resulginda/google-maps-scraper'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
+            git fetch origin main
+            git reset --hard origin/main
+            if [ -f .env.prod ]; then set -a && . ./.env.prod && set +a; fi
+            docker compose -f docker-compose.prod.yml build
+            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml ps
+            PORT="${SCRAPER_HOST_PORT:-18080}"
+            curl -sf -o /dev/null -w "health:%{http_code}\n" "http://127.0.0.1:${PORT}/" || true

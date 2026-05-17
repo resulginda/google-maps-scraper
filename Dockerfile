@@ -58,4 +58,6 @@ RUN chmod -R 755 /opt/browsers \
 
 COPY --from=builder /usr/bin/google-maps-scraper /usr/bin/
 
+EXPOSE 8080
+
 ENTRYPOINT ["google-maps-scraper"]

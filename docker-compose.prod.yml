@@ -1,0 +1,39 @@
+# Kitabe production — scrape.kitabe.org
+# Container içi her zaman :8080; host 8080 doluysa varsayılan 18080 (nginx buna yönlensin).
+#
+# Deploy (sunucuda repo kökünde):
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# İlk kurulumda nginx: deploy/nginx-scrape.kitabe.org.conf
+
+services:
+  google-maps-scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kitabe-google-maps-scraper:latest
+    container_name: kitabe-gmaps-scraper
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${SCRAPER_HOST_PORT:-18080}:8080"
+    volumes:
+      - gmaps-data:/gmapsdata
+      - gmaps-playwright:/opt
+    environment:
+      - PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
+    command:
+      - "-web"
+      - "-addr"
+      - ":8080"
+      - "-data-folder"
+      - "/gmapsdata"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
+volumes:
+  gmaps-data:
+  gmaps-playwright:
