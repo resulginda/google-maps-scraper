@@ -60,4 +60,9 @@ COPY --from=builder /usr/bin/google-maps-scraper /usr/bin/
 
 EXPOSE 8080
 
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
+
 ENTRYPOINT ["google-maps-scraper"]
+# Dokploy Dockerfile build: explicit web mode (no compose command override).
+CMD ["-web", "-addr", ":8080", "-data-folder", "/gmapsdata"]

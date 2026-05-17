@@ -1,33 +1,75 @@
 # Kitabe — scrape.kitabe.org deploy
 
-## Port (sizin bir şey yapmanıza gerek yok)
+## Durum: container çalışıyor, domain 502 veriyorsa
+
+Deploy logunda `visit http://localhost:8080` görüyorsanız **uygulama ayaktadır**. `Bad Gateway` genelde **dış proxy’nin yanlış porta gitmesi** demektir.
 
 | Katman | Port |
 |--------|------|
-| Container içi | **8080** (sabit, `-addr :8080`) |
-| Sunucu (host) | **18080** varsayılan (`SCRAPER_HOST_PORT`) |
-| nginx | `proxy_pass http://127.0.0.1:18080` |
+| Container içi (scraper) | **8080** (`-addr :8080`) |
+| Dokploy Domains | Hedef: container **8080** |
+| Eski nginx (opsiyonel) | `127.0.0.1:18080` — sadece host’ta bu port publish edildiyse |
 
-8080 host’ta başka servis varsa çakışma olmaz. Dış dünya yine `https://scrape.kitabe.org` (443).
+---
 
-## Otomatik deploy (GitHub push)
+## Dokploy (sizin kurulum — önerilen)
 
-1. Repo secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`
-2. `main` branch push → `.github/workflows/deploy-kitabe.yml` sunucuda:
+1. **General** → Repo `resulginda/google-maps-scraper`, branch `main`, Build **Dockerfile** (mevcut ayar doğru).
+2. **Domains** sekmesi:
+   - Host: `scrape.kitabe.org`
+   - **Container port: `8080`** (8080 değilse 502 alırsınız)
+   - HTTPS açık
+3. **Deploy** veya `main`’e push → autodeploy.
+4. Test:
+   - `https://scrape.kitabe.org/` → 200 veya 302
+   - `https://scrape.kitabe.org/api/docs` → Swagger
+
+### Kalıcı job verisi (isteğe bağlı)
+
+Dokploy → **Mounts** / volumes:
+
+- Container path: `/gmapsdata`
+- Named volume veya host path (job CSV’leri burada kalır)
+
+---
+
+## Çakışma: sunucuda ayrı nginx
+
+`deploy/nginx-scrape.kitabe.org.conf` **18080**’e proxy yapar. Dokploy sadece container’ı çalıştırıp **host’ta 18080 publish etmezse** nginx → **502 Bad Gateway**.
+
+**İki seçenekten biri:**
+
+**A) Sadece Dokploy Domains** (kolay)  
+- `scrape.kitabe.org` için sunucudaki nginx site’ını kapatın veya DNS’i Dokploy Traefik’e bırakın.  
+- Domains → port **8080**.
+
+**B) nginx + host port**  
+- Dokploy uygulamasında **Published port** `18080:8080` (veya Advanced → port mapping).  
+- nginx `proxy_pass http://127.0.0.1:18080;` aynen kalır.  
+- Domains’te aynı domain’i **iki kez** tanımlamayın (nginx ve Dokploy çakışmasın).
+
+Sunucuda kontrol:
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:18080/
+# veya Dokploy network üzerinden container IP:8080
 ```
 
-3. Sunucuda bir kez nginx: `deploy/nginx-scrape.kitabe.org.conf` → sites-enabled
+`200` / `302` beklenir.
 
-## Manuel (ilk kurulum)
+---
+
+## docker compose (Dokploy dışı manuel deploy)
 
 ```bash
-cd /opt/google-maps-scraper   # DEPLOY_PATH
-cp .env.prod.example .env.prod   # isteğe bağlı
 docker compose -f docker-compose.prod.yml up -d --build
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:18080/
 ```
 
-`200` veya `302` beklenir. Sonra: `https://scrape.kitabe.org/api/docs`
+`.env.prod.example` → `SCRAPER_HOST_PORT=18080` (host 8080 doluysa).
+
+---
+
+## GitHub Actions (opsiyonel)
+
+`.github/workflows/deploy-kitabe.yml` — SSH ile compose deploy. Dokploy autodeploy kullanıyorsanız zorunlu değil.
