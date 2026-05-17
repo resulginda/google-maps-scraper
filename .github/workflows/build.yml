@@ -39,6 +39,12 @@ jobs:
       - name: Go Mod Verify
         run: go mod verify
       - name: Go Vulnerability Check
-        run: make vuln
+        run: |
+          for attempt in 1 2 3; do
+            go tool govulncheck -C . ./... && exit 0
+            echo "govulncheck attempt $attempt failed, retrying..."
+            sleep 15
+          done
+          exit 1
       - name: Go Build
         run: go build -o /dev/null ./...
