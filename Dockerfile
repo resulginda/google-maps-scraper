@@ -26,8 +26,8 @@ WORKDIR /app
 RUN mkdir -p /gmapsdata/geojson/tr/il /gmapsdata/geojson/tr/ilce \
     && (for i in 1 2 3; do \
         CGO_ENABLED=0 go run ./scripts/prepare-turkey-geojson/main.go /gmapsdata && exit 0; \
-        echo "geojson bake attempt $i failed, retrying..."; sleep 45; \
-    done; echo "geojson bake skipped — container will retry in background")
+        echo "geojson bake retry $i/3 in 45s..."; sleep 45; \
+    done; echo "geojson bake deferred to container startup")
 
 # Final stage
 FROM debian:trixie-slim
