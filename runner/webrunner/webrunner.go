@@ -174,18 +174,44 @@ func (w *webrunner) work(ctx context.Context) error {
 	}
 }
 
-func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) error {
+func (w *webrunner) persistJobStatus(job *web.Job) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	return w.svc.Update(ctx, job)
+}
+
+func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) (err error) {
+	statusFinalized := false
+
+	defer func() {
+		if statusFinalized || job.Status != web.StatusWorking {
+			return
+		}
+
+		if err == nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			job.Status = web.StatusOK
+		} else {
+			job.Status = web.StatusFailed
+		}
+
+		if uerr := w.persistJobStatus(job); uerr != nil {
+			log.Printf("failed to finalize job %s status %s: %v", job.ID, job.Status, uerr)
+		}
+	}()
+
 	job.Status = web.StatusWorking
 
-	err := w.svc.Update(ctx, job)
+	err = w.persistJobStatus(job)
 	if err != nil {
 		return err
 	}
 
 	if len(job.Data.Keywords) == 0 {
 		job.Status = web.StatusFailed
+		statusFinalized = true
 
-		return w.svc.Update(ctx, job)
+		return w.persistJobStatus(job)
 	}
 
 	outpath := filepath.Join(w.cfg.DataFolder, job.ID+".csv")
@@ -193,7 +219,9 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) error {
 	outfile, err := os.Create(outpath)
 	if err != nil {
 		job.Status = web.StatusFailed
-		if err2 := w.svc.Update(ctx, job); err2 != nil {
+		statusFinalized = true
+
+		if err2 := w.persistJobStatus(job); err2 != nil {
 			log.Printf("failed to update job status: %v", err2)
 		}
 
@@ -207,16 +235,14 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) error {
 	mate, err := w.setupMate(ctx, outfile, job)
 	if err != nil {
 		job.Status = web.StatusFailed
+		statusFinalized = true
 
-		err2 := w.svc.Update(ctx, job)
-		if err2 != nil {
+		if err2 := w.persistJobStatus(job); err2 != nil {
 			log.Printf("failed to update job status: %v", err2)
 		}
 
 		return err
 	}
-
-	defer mate.Close()
 
 	var coords string
 	if job.Data.Lat != "" && job.Data.Lon != "" {
@@ -247,7 +273,9 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) error {
 	)
 	if err != nil {
 		job.Status = web.StatusFailed
-		if err2 := w.svc.Update(ctx, job); err2 != nil {
+		statusFinalized = true
+
+		if err2 := w.persistJobStatus(job); err2 != nil {
 			log.Printf("failed to update job status: %v", err2)
 		}
 
@@ -277,23 +305,40 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) error {
 		go exitMonitor.Run(mateCtx)
 
 		err = mate.Start(mateCtx, seedJobs...)
-		if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
-			cancel()
+		if cerr := mate.Close(); cerr != nil {
+			log.Printf("job %s mate close: %v", job.ID, cerr)
+		}
 
+		cancel()
+
+		if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 			job.Status = web.StatusFailed
-			if err2 := w.svc.Update(ctx, job); err2 != nil {
+			statusFinalized = true
+
+			if err2 := w.persistJobStatus(job); err2 != nil {
 				log.Printf("failed to update job status: %v", err2)
 			}
 
 			return err
 		}
 
-		cancel()
+		if err != nil {
+			log.Printf("job %s scrapemate finished: %v", job.ID, err)
+		}
 	}
 
 	job.Status = web.StatusOK
+	statusFinalized = true
 
-	return w.svc.Update(ctx, job)
+	if err = w.persistJobStatus(job); err != nil {
+		log.Printf("failed to mark job %s ok: %v", job.ID, err)
+
+		return err
+	}
+
+	log.Printf("job %s status set to ok", job.ID)
+
+	return nil
 }
 
 func (w *webrunner) setupMate(_ context.Context, writer io.Writer, job *web.Job) (*scrapemateapp.ScrapemateApp, error) {

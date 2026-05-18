@@ -3,7 +3,10 @@ package exiter
 import (
 	"context"
 	"sync"
+	"time"
 )
+
+const defaultPlaceDrainGrace = 5 * time.Minute
 
 type Exiter interface {
 	SetSeedCount(int)
@@ -20,15 +23,19 @@ type exiter struct {
 	placesFound     int
 	placesCompleted int
 
-	mu         *sync.Mutex
-	cancelFunc context.CancelFunc
-	doneCh     chan struct{}
+	mu              *sync.Mutex
+	cancelFunc      context.CancelFunc
+	doneCh          chan struct{}
+	seedsDoneCh     chan struct{}
+	placeDrainGrace time.Duration
 }
 
 func New() Exiter {
 	return &exiter{
-		mu:     &sync.Mutex{},
-		doneCh: make(chan struct{}, 1),
+		mu:              &sync.Mutex{},
+		doneCh:          make(chan struct{}, 1),
+		seedsDoneCh:     make(chan struct{}, 1),
+		placeDrainGrace: defaultPlaceDrainGrace,
 	}
 }
 
@@ -49,15 +56,8 @@ func (e *exiter) SetCancelFunc(fn context.CancelFunc) {
 func (e *exiter) IncrSeedCompleted(val int) {
 	e.mu.Lock()
 	e.seedCompleted += val
-	done := e.seedCompleted >= e.seedCount && e.placesCompleted >= e.placesFound
+	e.maybeSignalDoneLocked()
 	e.mu.Unlock()
-
-	if done {
-		select {
-		case e.doneCh <- struct{}{}:
-		default:
-		}
-	}
 }
 
 func (e *exiter) IncrPlacesFound(val int) {
@@ -70,24 +70,75 @@ func (e *exiter) IncrPlacesFound(val int) {
 func (e *exiter) IncrPlacesCompleted(val int) {
 	e.mu.Lock()
 	e.placesCompleted += val
-	done := e.seedCompleted >= e.seedCount && e.placesCompleted >= e.placesFound
+	e.maybeSignalDoneLocked()
 	e.mu.Unlock()
+}
 
-	if done {
-		select {
-		case e.doneCh <- struct{}{}:
-		default:
-		}
+func (e *exiter) maybeSignalDoneLocked() {
+	if e.seedCount <= 0 {
+		return
+	}
+
+	seedsDone := e.seedCompleted >= e.seedCount
+	placesDone := e.placesCompleted >= e.placesFound
+
+	switch {
+	case seedsDone && placesDone:
+		e.signalDoneLocked()
+	case seedsDone:
+		e.signalSeedsDoneLocked()
+	}
+}
+
+func (e *exiter) signalDoneLocked() {
+	select {
+	case e.doneCh <- struct{}{}:
+	default:
+	}
+}
+
+func (e *exiter) signalSeedsDoneLocked() {
+	select {
+	case e.seedsDoneCh <- struct{}{}:
+	default:
+	}
+}
+
+func (e *exiter) invokeCancel() {
+	if e.cancelFunc != nil {
+		e.cancelFunc()
 	}
 }
 
 func (e *exiter) Run(ctx context.Context) {
-	select {
-	case <-ctx.Done():
-		return
-	case <-e.doneCh:
-		if e.cancelFunc != nil {
-			e.cancelFunc()
+	var drainTimer *time.Timer
+	var drainC <-chan time.Time
+
+	defer func() {
+		if drainTimer != nil {
+			drainTimer.Stop()
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-e.doneCh:
+			e.invokeCancel()
+
+			return
+		case <-e.seedsDoneCh:
+			if drainTimer != nil {
+				drainTimer.Stop()
+			}
+
+			drainTimer = time.NewTimer(e.placeDrainGrace)
+			drainC = drainTimer.C
+		case <-drainC:
+			e.invokeCancel()
+
+			return
 		}
 	}
 }
