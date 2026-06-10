@@ -1,0 +1,71 @@
+<div class="live-dashboard" id="live-dashboard-inner" {{if or (eq .Job.Status "working") (eq .Job.Status "pending")}}hx-get="/jobs/{{.Job.ID}}/live" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
+    <div class="live-header">
+        <div>
+            <h2>Canlı Akış — {{.Job.Name}}</h2>
+            <p class="live-subtitle">Tarama sonuçları gerçek zamanlı listelenir. Logdaki <code>job finished</code> tek arama veya tek yer sayfasıdır; üst durum tüm iş bitene kadar <strong>working</strong> kalır.</p>
+        </div>
+        <div class="live-stats">
+            <div class="live-stat"><span>Durum</span><strong class="status-{{.Job.Status}}">{{.Job.Status}}</strong></div>
+            {{if .HasLive}}
+            <div class="live-stat"><span>CSV satır</span><strong>{{.Live.CSVRows}}</strong></div>
+            <div class="live-stat"><span>Arama</span><strong>{{.Live.SeedCompleted}} / {{.Live.SeedCount}}</strong></div>
+            <div class="live-stat"><span>Yer işlendi</span><strong>{{.Live.PlacesCompleted}} / {{.Live.PlacesFound}}</strong></div>
+            <div class="live-stat"><span>Süre</span><strong>{{.Live.ElapsedSeconds}} sn</strong></div>
+            <div class="live-stat"><span>İlerleme</span><strong>{{.Live.ProgressPercent}}%</strong></div>
+            {{end}}
+        </div>
+    </div>
+
+    {{if .HasLive}}
+    <div class="live-progress-bar">
+        <div class="live-progress-fill" style="width: {{.Live.ProgressPercent}}%;"></div>
+    </div>
+    {{end}}
+
+    <div class="live-grid">
+        <section class="live-places-panel">
+            <h3>Bulunan Yerler ({{if .HasLive}}{{.Live.CSVRows}}{{else}}0{{end}})</h3>
+            <div class="live-table-wrap">
+                <table class="live-table">
+                    <thead>
+                        <tr>
+                            <th>Yer Adı</th>
+                            <th>Kategori</th>
+                            <th>Adres</th>
+                            <th>Link</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{if .HasLive}}
+                            {{range .Live.RecentPlaces}}
+                            <tr>
+                                <td>{{if .Title}}{{.Title}}{{else}}—{{end}}</td>
+                                <td>{{if .Category}}{{.Category}}{{else}}—{{end}}</td>
+                                <td>{{if .Address}}{{.Address}}{{else}}—{{end}}</td>
+                                <td>{{if .Link}}<a href="{{.Link}}" target="_blank" rel="noopener">Maps</a>{{else}}—{{end}}</td>
+                            </tr>
+                            {{else}}
+                            <tr><td colspan="4" class="live-empty">Henüz CSV satırı yok — aramalar sürüyor…</td></tr>
+                            {{end}}
+                        {{else}}
+                            <tr><td colspan="4" class="live-empty">Canlı veri yok</td></tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="live-log-panel">
+            <h3>İşlem Logu</h3>
+            <div class="live-log">
+                {{if and .HasLive .Live.Logs}}
+                    {{range .Live.Logs}}
+                    <div class="live-log-line"><time>{{.Time.Format "15:04:05"}}</time> {{.Message}}</div>
+                    {{end}}
+                {{else}}
+                    <div class="live-log-line live-empty">Log bekleniyor…</div>
+                {{end}}
+            </div>
+        </section>
+    </div>
+</div>

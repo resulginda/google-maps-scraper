@@ -8,12 +8,20 @@ import (
 
 const defaultPlaceDrainGrace = 5 * time.Minute
 
+type Snapshot struct {
+	SeedCount       int `json:"seed_count"`
+	SeedCompleted   int `json:"seed_completed"`
+	PlacesFound     int `json:"places_found"`
+	PlacesCompleted int `json:"places_completed"`
+}
+
 type Exiter interface {
 	SetSeedCount(int)
 	SetCancelFunc(context.CancelFunc)
 	IncrSeedCompleted(int)
 	IncrPlacesFound(int)
 	IncrPlacesCompleted(int)
+	Snapshot() Snapshot
 	Run(context.Context)
 }
 
@@ -72,6 +80,18 @@ func (e *exiter) IncrPlacesCompleted(val int) {
 	e.placesCompleted += val
 	e.maybeSignalDoneLocked()
 	e.mu.Unlock()
+}
+
+func (e *exiter) Snapshot() Snapshot {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return Snapshot{
+		SeedCount:       e.seedCount,
+		SeedCompleted:   e.seedCompleted,
+		PlacesFound:     e.placesFound,
+		PlacesCompleted: e.placesCompleted,
+	}
 }
 
 func (e *exiter) maybeSignalDoneLocked() {

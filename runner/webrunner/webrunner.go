@@ -304,6 +304,28 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) (err error) {
 
 		go exitMonitor.Run(mateCtx)
 
+		web.StartLiveProgress(job.ID, job.Name, len(seedJobs))
+
+		progressDone := make(chan struct{})
+		defer close(progressDone)
+
+		go func() {
+			ticker := time.NewTicker(2 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-mateCtx.Done():
+					web.UpdateLiveProgress(job.ID, exitMonitor.Snapshot(), w.svc)
+					return
+				case <-progressDone:
+					return
+				case <-ticker.C:
+					web.UpdateLiveProgress(job.ID, exitMonitor.Snapshot(), w.svc)
+				}
+			}
+		}()
+
 		err = mate.Start(mateCtx, seedJobs...)
 		if cerr := mate.Close(); cerr != nil {
 			log.Printf("job %s mate close: %v", job.ID, cerr)
@@ -314,6 +336,8 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) (err error) {
 		if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 			job.Status = web.StatusFailed
 			statusFinalized = true
+			web.SetLiveJobStatus(job.ID, web.StatusFailed)
+			web.UpdateLiveProgress(job.ID, exitMonitor.Snapshot(), w.svc)
 
 			if err2 := w.persistJobStatus(job); err2 != nil {
 				log.Printf("failed to update job status: %v", err2)
@@ -329,6 +353,8 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) (err error) {
 
 	job.Status = web.StatusOK
 	statusFinalized = true
+	web.SetLiveJobStatus(job.ID, web.StatusOK)
+	web.UpdateLiveProgress(job.ID, exitMonitor.Snapshot(), w.svc)
 
 	if err = w.persistJobStatus(job); err != nil {
 		log.Printf("failed to mark job %s ok: %v", job.ID, err)

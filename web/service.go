@@ -2,8 +2,10 @@ package web
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -66,6 +68,88 @@ func (s *Service) Update(ctx context.Context, job *Job) error {
 
 func (s *Service) SelectPending(ctx context.Context) ([]Job, error) {
 	return s.repo.Select(ctx, SelectParams{Status: StatusPending, Limit: 1})
+}
+
+// GetCSVPreview reads the in-progress or finished CSV and returns row count + last rows.
+func (s *Service) GetCSVPreview(id string, maxRows int) (int, []CSVPlacePreview, error) {
+	if strings.Contains(id, "/") || strings.Contains(id, "\\") || strings.Contains(id, "..") {
+		return 0, nil, fmt.Errorf("invalid file name")
+	}
+
+	if maxRows <= 0 {
+		maxRows = 50
+	}
+
+	datapath := filepath.Join(s.dataFolder, id+".csv")
+	f, err := os.Open(datapath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil, nil
+		}
+
+		return 0, nil, err
+	}
+	defer f.Close()
+
+	reader := csv.NewReader(f)
+	reader.LazyQuotes = true
+	reader.FieldsPerRecord = -1
+
+	headers, err := reader.Read()
+	if err != nil {
+		if err == io.EOF {
+			return 0, nil, nil
+		}
+
+		return 0, nil, err
+	}
+
+	colIdx := map[string]int{}
+	for i, h := range headers {
+		colIdx[strings.TrimSpace(strings.ToLower(h))] = i
+	}
+
+	var rows [][]string
+
+	for {
+		row, readErr := reader.Read()
+		if readErr == io.EOF {
+			break
+		}
+
+		if readErr != nil {
+			continue
+		}
+
+		rows = append(rows, row)
+	}
+
+	total := len(rows)
+	start := 0
+	if total > maxRows {
+		start = total - maxRows
+	}
+
+	pick := func(row []string, key string) string {
+		idx, ok := colIdx[key]
+		if !ok || idx >= len(row) {
+			return ""
+		}
+
+		return strings.TrimSpace(row[idx])
+	}
+
+	out := make([]CSVPlacePreview, 0, total-start)
+	for _, row := range rows[start:] {
+		out = append(out, CSVPlacePreview{
+			Title:    pick(row, "title"),
+			Category: pick(row, "category"),
+			Address:  pick(row, "address"),
+			Link:     pick(row, "link"),
+		})
+	}
+
+	return total, out, nil
 }
 
 func (s *Service) GetCSV(_ context.Context, id string) (string, error) {

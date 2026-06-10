@@ -66,6 +66,10 @@ func New(svc *Service, addr string) (*Server, error) {
 		ans.delete(w, r)
 	})
 	mux.HandleFunc("/jobs", ans.getJobs)
+	mux.HandleFunc("/jobs/{id}/live", func(w http.ResponseWriter, r *http.Request) {
+		r = requestWithID(r)
+		ans.livePanel(w, r)
+	})
 	mux.HandleFunc("/", ans.index)
 
 	// api routes
@@ -104,6 +108,20 @@ func New(svc *Service, addr string) (*Server, error) {
 		}
 	})
 
+	mux.HandleFunc("/api/v1/jobs/{id}/live", func(w http.ResponseWriter, r *http.Request) {
+		r = requestWithID(r)
+		if r.Method != http.MethodGet {
+			renderJSON(w, http.StatusMethodNotAllowed, apiError{
+				Code:    http.StatusMethodNotAllowed,
+				Message: "Method not allowed",
+			})
+
+			return
+		}
+
+		ans.apiGetJobLive(w, r)
+	})
+
 	mux.HandleFunc("/api/v1/jobs/{id}/download", func(w http.ResponseWriter, r *http.Request) {
 		r = requestWithID(r)
 
@@ -128,6 +146,7 @@ func New(svc *Service, addr string) (*Server, error) {
 		"static/templates/index.html",
 		"static/templates/job_rows.html",
 		"static/templates/job_row.html",
+		"static/templates/live_panel.html",
 		"static/templates/redoc.html",
 	}
 
@@ -798,6 +817,125 @@ func (s *Server) apiGetJobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderJSON(w, http.StatusOK, jobs)
+}
+
+type livePanelData struct {
+	Job   Job
+	Live  LiveJobState
+	HasLive bool
+}
+
+func (s *Server) livePanel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	id, ok := getIDFromRequest(r)
+	if !ok {
+		http.Error(w, "Invalid ID", http.StatusUnprocessableEntity)
+
+		return
+	}
+
+	job, err := s.svc.Get(r.Context(), id.String())
+	if err != nil {
+		http.Error(w, "Job not found", http.StatusNotFound)
+
+		return
+	}
+
+	live, hasLive := GetLiveJobState(id.String())
+	if !hasLive {
+		rowCount, previews, previewErr := s.svc.GetCSVPreview(id.String(), maxLivePlaces)
+		if previewErr == nil && rowCount > 0 {
+			live = LiveJobState{
+				JobID:        id.String(),
+				JobName:      job.Name,
+				Status:       job.Status,
+				CSVRows:      rowCount,
+				RecentPlaces: previews,
+				Logs: []LiveLogEntry{{
+					Time:    time.Now().UTC(),
+					Message: "Canlı oturum yok; CSV önizlemesi gösteriliyor",
+				}},
+			}
+			if job.Status == StatusOK {
+				live.ProgressPercent = 100
+			}
+
+			hasLive = true
+		}
+	}
+
+	tmpl, ok := s.tmpl["static/templates/live_panel.html"]
+	if !ok {
+		http.Error(w, "missing tpl", http.StatusInternalServerError)
+
+		return
+	}
+
+	_ = tmpl.Execute(w, livePanelData{
+		Job:     job,
+		Live:    live,
+		HasLive: hasLive,
+	})
+}
+
+func (s *Server) apiGetJobLive(w http.ResponseWriter, r *http.Request) {
+	id, ok := getIDFromRequest(r)
+	if !ok {
+		renderJSON(w, http.StatusUnprocessableEntity, apiError{
+			Code:    http.StatusUnprocessableEntity,
+			Message: "Invalid ID",
+		})
+
+		return
+	}
+
+	job, err := s.svc.Get(r.Context(), id.String())
+	if err != nil {
+		renderJSON(w, http.StatusNotFound, apiError{
+			Code:    http.StatusNotFound,
+			Message: http.StatusText(http.StatusNotFound),
+		})
+
+		return
+	}
+
+	live, hasLive := GetLiveJobState(id.String())
+	if !hasLive {
+		rowCount, previews, previewErr := s.svc.GetCSVPreview(id.String(), maxLivePlaces)
+		if previewErr == nil {
+			live = LiveJobState{
+				JobID:        id.String(),
+				JobName:      job.Name,
+				Status:       job.Status,
+				CSVRows:      rowCount,
+				RecentPlaces: previews,
+			}
+			if job.Status == StatusOK {
+				live.ProgressPercent = 100
+			}
+
+			hasLive = rowCount > 0 || job.Status == StatusWorking || job.Status == StatusPending
+		}
+	}
+
+	if !hasLive {
+		renderJSON(w, http.StatusOK, map[string]any{
+			"job":  job,
+			"live": nil,
+		})
+
+		return
+	}
+
+	renderJSON(w, http.StatusOK, map[string]any{
+		"job":  job,
+		"live": live,
+	})
 }
 
 func (s *Server) apiGetJob(w http.ResponseWriter, r *http.Request) {
