@@ -507,32 +507,43 @@ nav a:hover {
     overflow: auto;
     border: 1px solid #334155;
     border-radius: 8px;
+    background: #0f172a;
 }
 
-.live-table {
+.live-dashboard .live-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
+    background: #0f172a !important;
+    box-shadow: none;
 }
 
-.live-table th,
-.live-table td {
+.live-dashboard .live-table th,
+.live-dashboard .live-table td {
     padding: 8px 10px;
     border-bottom: 1px solid #334155;
     text-align: left;
     vertical-align: top;
+    color: #f1f5f9 !important;
+    background: transparent;
 }
 
-.live-table th {
+.live-dashboard .live-table th {
     position: sticky;
     top: 0;
-    background: #1e293b;
-    color: #94a3b8;
+    background: #1e293b !important;
+    color: #cbd5e1 !important;
     z-index: 1;
+    font-weight: 600;
 }
 
-.live-table a {
-    color: #7dd3fc;
+.live-dashboard .live-table tbody tr:hover td {
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.live-dashboard .live-table a {
+    color: #38bdf8;
+    font-weight: 600;
 }
 
 .live-empty {
@@ -554,9 +565,10 @@ nav a:hover {
 .live-log-line {
     padding: 3px 0;
     border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    color: #e2e8f0;
 }
 
 .live-log-line time {
-    color: #64748b;
+    color: #94a3b8;
     margin-right: 8px;
 }

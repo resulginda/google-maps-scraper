@@ -49,6 +49,9 @@ type liveJobInternal struct {
 	lastPlacesFound int
 	lastPlacesDone  int
 	lastCSVRows     int
+	completeSince   time.Time
+	lastSnap        exiter.Snapshot
+	lastSnapChange  time.Time
 }
 
 var (
@@ -62,6 +65,7 @@ func StartLiveProgress(jobID, jobName string, seedCount int) {
 
 	now := time.Now().UTC()
 	liveJobs[jobID] = &liveJobInternal{
+		lastSnapChange: now,
 		state: LiveJobState{
 			JobID:      jobID,
 			JobName:    jobName,
@@ -72,6 +76,19 @@ func StartLiveProgress(jobID, jobName string, seedCount int) {
 			Logs:       []LiveLogEntry{{Time: now, Message: "Tarama başladı"}},
 		},
 	}
+}
+
+func AppendLiveLog(jobID, message string) {
+	liveMu.Lock()
+	defer liveMu.Unlock()
+
+	item, ok := liveJobs[jobID]
+	if !ok {
+		return
+	}
+
+	appendLiveLog(item, message)
+	item.state.UpdatedAt = time.Now().UTC()
 }
 
 func SetLiveJobStatus(jobID, status string) {
@@ -85,6 +102,9 @@ func SetLiveJobStatus(jobID, status string) {
 
 	item.state.Status = status
 	item.state.UpdatedAt = time.Now().UTC()
+	if status == StatusOK {
+		item.state.ProgressPercent = 100
+	}
 	msg := "İş tamamlandı"
 	if status == StatusFailed {
 		msg = "İş başarısız"
@@ -143,9 +163,55 @@ func UpdateLiveProgress(jobID string, snap exiter.Snapshot, svc *Service) {
 		}
 	}
 
-	if snap.SeedCount > 0 && snap.SeedCompleted >= snap.SeedCount && snap.PlacesFound > 0 && snap.PlacesCompleted >= snap.PlacesFound {
+	if snap.SeedCount > 0 && snap.SeedCompleted >= snap.SeedCount && snap.PlacesCompleted >= snap.PlacesFound {
 		item.state.ProgressPercent = 99
 	}
+
+	if snap != item.lastSnap {
+		item.lastSnap = snap
+		item.lastSnapChange = now
+		item.completeSince = time.Time{}
+	}
+
+	workDone := snap.SeedCount > 0 &&
+		snap.SeedCompleted >= snap.SeedCount &&
+		snap.PlacesCompleted >= snap.PlacesFound
+
+	if workDone {
+		if item.completeSince.IsZero() {
+			item.completeSince = now
+		}
+	} else {
+		item.completeSince = time.Time{}
+	}
+}
+
+// ShouldForceCancel returns true when scrape counters are done but scrapemate is still running.
+func ShouldForceCancel(jobID string, stallAfterComplete, stallAfterIdle time.Duration) (bool, string) {
+	liveMu.RLock()
+	defer liveMu.RUnlock()
+
+	item, ok := liveJobs[jobID]
+	if !ok {
+		return false, ""
+	}
+
+	now := time.Now().UTC()
+	snap := item.lastSnap
+
+	workDone := snap.SeedCount > 0 &&
+		snap.SeedCompleted >= snap.SeedCount &&
+		snap.PlacesCompleted >= snap.PlacesFound
+
+	if workDone && !item.completeSince.IsZero() && now.Sub(item.completeSince) >= stallAfterComplete {
+		return true, "Tüm aramalar ve yerler işlendi; scrapemate hâlâ açık — otomatik kapatılıyor"
+	}
+
+	if !item.lastSnapChange.IsZero() && now.Sub(item.lastSnapChange) >= stallAfterIdle {
+		return true, "Uzun süredir ilerleme yok — otomatik kapatılıyor"
+	}
+
+	return false, ""
 }
 
 func GetLiveJobState(jobID string) (LiveJobState, bool) {

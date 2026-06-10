@@ -6,7 +6,8 @@ import (
 	"time"
 )
 
-const defaultPlaceDrainGrace = 5 * time.Minute
+// Seeds bittikten sonra kalan yer sayfaları için bekleme (eski 5dk çok uzundu).
+const defaultPlaceDrainGrace = 90 * time.Second
 
 type Snapshot struct {
 	SeedCount       int `json:"seed_count"`

@@ -321,12 +321,34 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) (err error) {
 				case <-progressDone:
 					return
 				case <-ticker.C:
-					web.UpdateLiveProgress(job.ID, exitMonitor.Snapshot(), w.svc)
+					snap := exitMonitor.Snapshot()
+					web.UpdateLiveProgress(job.ID, snap, w.svc)
+
+					if force, msg := web.ShouldForceCancel(job.ID, 90*time.Second, 4*time.Minute); force {
+						log.Printf("job %s stall watchdog: %s", job.ID, msg)
+						web.AppendLiveLog(job.ID, msg)
+						cancel()
+					}
 				}
 			}
 		}()
 
-		err = mate.Start(mateCtx, seedJobs...)
+		startDone := make(chan error, 1)
+		go func() {
+			startDone <- mate.Start(mateCtx, seedJobs...)
+		}()
+
+		select {
+		case err = <-startDone:
+		case <-mateCtx.Done():
+			select {
+			case err = <-startDone:
+			case <-time.After(90 * time.Second):
+				log.Printf("job %s: mate.Start did not exit within 90s after cancel, finalizing", job.ID)
+				web.AppendLiveLog(job.ID, "Scrapemate 90 sn içinde kapanmadı — iş sonuçlandırılıyor")
+				err = context.Canceled
+			}
+		}
 		if cerr := mate.Close(); cerr != nil {
 			log.Printf("job %s mate close: %v", job.ID, cerr)
 		}
@@ -370,7 +392,7 @@ func (w *webrunner) scrapeJob(ctx context.Context, job *web.Job) (err error) {
 func (w *webrunner) setupMate(_ context.Context, writer io.Writer, job *web.Job) (*scrapemateapp.ScrapemateApp, error) {
 	opts := []func(*scrapemateapp.Config) error{
 		scrapemateapp.WithConcurrency(w.cfg.Concurrency),
-		scrapemateapp.WithExitOnInactivity(time.Minute * 3),
+		scrapemateapp.WithExitOnInactivity(90 * time.Second),
 	}
 
 	if !job.Data.FastMode {

@@ -1,8 +1,8 @@
-<div class="live-dashboard" id="live-dashboard-inner" {{if or (eq .Job.Status "working") (eq .Job.Status "pending")}}hx-get="/jobs/{{.Job.ID}}/live" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
+<div class="live-dashboard" id="live-dashboard-inner" {{if or (eq .Job.Status "working") (eq .Job.Status "pending")}}hx-get="/jobs/{{.Job.ID}}/live" hx-trigger="every 3s" hx-swap="outerHTML settle:100ms"{{end}}>
     <div class="live-header">
         <div>
             <h2>Canlı Akış — {{.Job.Name}}</h2>
-            <p class="live-subtitle">Tarama sonuçları gerçek zamanlı listelenir. Logdaki <code>job finished</code> tek arama veya tek yer sayfasıdır; üst durum tüm iş bitene kadar <strong>working</strong> kalır.</p>
+            <p class="live-subtitle">Logdaki <code>job finished</code> tek arama/sayfadır. Sayaçlar dolunca scrapemate 90 sn içinde otomatik kapanır; takılırsa 4 dk sonra zorla sonlandırılır.</p>
         </div>
         <div class="live-stats">
             <div class="live-stat"><span>Durum</span><strong class="status-{{.Job.Status}}">{{.Job.Status}}</strong></div>
@@ -25,7 +25,7 @@
     <div class="live-grid">
         <section class="live-places-panel">
             <h3>Bulunan Yerler ({{if .HasLive}}{{.Live.CSVRows}}{{else}}0{{end}})</h3>
-            <div class="live-table-wrap">
+            <div class="live-table-wrap" id="live-places-scroll">
                 <table class="live-table">
                     <thead>
                         <tr>
@@ -57,7 +57,7 @@
 
         <section class="live-log-panel">
             <h3>İşlem Logu</h3>
-            <div class="live-log">
+            <div class="live-log" id="live-log-scroll">
                 {{if and .HasLive .Live.Logs}}
                     {{range .Live.Logs}}
                     <div class="live-log-line"><time>{{.Time.Format "15:04:05"}}</time> {{.Message}}</div>
@@ -69,3 +69,24 @@
         </section>
     </div>
 </div>
+<script>
+(function () {
+    if (window.__kitabeLiveScrollBound) return;
+    window.__kitabeLiveScrollBound = true;
+    document.body.addEventListener('htmx:beforeRequest', function (ev) {
+        var path = (ev.detail.pathInfo && ev.detail.pathInfo.requestPath) || '';
+        if (path.indexOf('/live') === -1) return;
+        window.__kitabeLiveScroll = {
+            places: (document.getElementById('live-places-scroll') || {}).scrollTop || 0,
+            log: (document.getElementById('live-log-scroll') || {}).scrollTop || 0
+        };
+    });
+    document.body.addEventListener('htmx:afterSwap', function () {
+        if (!window.__kitabeLiveScroll) return;
+        var p = document.getElementById('live-places-scroll');
+        var l = document.getElementById('live-log-scroll');
+        if (p) p.scrollTop = window.__kitabeLiveScroll.places;
+        if (l) l.scrollTop = window.__kitabeLiveScroll.log;
+    });
+})();
+</script>
