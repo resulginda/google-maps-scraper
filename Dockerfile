@@ -4,11 +4,11 @@ FROM golang:1.26.2-trixie AS playwright-deps
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
 
-# Pin CLI to the same major line as go.mod (avoid @latest drift vs library).
+# Pin CLI to the same major line as go.mod (v0.4702.0 stabil sürüme çekildi).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/* \
-    && go install github.com/playwright-community/playwright-go/cmd/playwright@v0.5700.1 \
+    && go install github.com/playwright-community/playwright-go/cmd/playwright@v0.4702.0 \
     && mkdir -p /opt/browsers \
     && playwright install chromium --with-deps
 
