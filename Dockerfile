@@ -2,8 +2,13 @@
 FROM ubuntu:20.04 AS playwright-deps
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
 ENV PLAYWRIGHT_DRIVER_PATH=/opt/ms-playwright-go
+
+# Microsoft'un yeni Playwright CDN adresi (404 indirme hatasını çözer)
+ENV PLAYWRIGHT_DOWNLOAD_HOST="https://playwright.download.prss.microsoft.com/dbuyiflzsi96"
+
 ARG TARGETARCH
-ARG PLAYWRIGHT_GO_VERSION=v0.6100.0
+# Go uygulamasının runtime'da aradığı tam sürüme (1.57.0) eşitliyoruz
+ARG PLAYWRIGHT_GO_VERSION=v0.5700.1
 
 RUN export PATH=$PATH:/usr/local/go/bin:/root/go/bin \
     && apt-get update \
@@ -18,7 +23,7 @@ RUN export PATH=$PATH:/usr/local/go/bin:/root/go/bin \
     && rm "go1.26.5.linux-${GO_ARCH}.tar.gz" \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
-    && go install github.com/mxschmitt/playwright-go/cmd/playwright@${PLAYWRIGHT_GO_VERSION} \
+    && go install github.com/playwright-community/playwright-go/cmd/playwright@${PLAYWRIGHT_GO_VERSION} \
     && mkdir -p /opt/browsers \
     && playwright install chromium --with-deps
 
@@ -26,7 +31,7 @@ RUN export PATH=$PATH:/usr/local/go/bin:/root/go/bin \
 FROM golang:1.26.5-trixie AS builder
 WORKDIR /app
 COPY . .
-RUN go mod tidy && go mod download
+# Sadece kodları derle, go.mod'a dokunma
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /usr/bin/google-maps-scraper
 
 # Bake Turkey boundaries into the image
@@ -42,6 +47,7 @@ RUN mkdir -p /gmapsdata/geojson/tr/il /gmapsdata/geojson/tr/ilce \
 FROM debian:trixie-slim
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
 ENV PLAYWRIGHT_DRIVER_PATH=/opt/ms-playwright-go
+ENV PLAYWRIGHT_DOWNLOAD_HOST="https://playwright.download.prss.microsoft.com/dbuyiflzsi96"
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -84,4 +90,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
 
 ENTRYPOINT ["google-maps-scraper"]
-CMD ["-web", "-addr", ":8080", "-data-folder", "/gmapsdata"]
+CMD ["-web", "-addr", ":8080", "-data-folder", "/gmapsdata"] 
