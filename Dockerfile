@@ -2,13 +2,12 @@
 FROM ubuntu:20.04 AS playwright-deps
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
 ENV PLAYWRIGHT_DRIVER_PATH=/opt/ms-playwright-go
-
-# Microsoft'un yeni Playwright CDN adresi (404 indirme hatasını çözer)
-ENV PLAYWRIGHT_DOWNLOAD_HOST="https://playwright.download.prss.microsoft.com/dbuyiflzsi96"
-
 ARG TARGETARCH
-# Go uygulamasının runtime'da aradığı tam sürüme (1.57.0) eşitliyoruz
+
+# Scrapemate'in zorladığı ve Go'nun aradığı tam sürüm: v0.5700.1 (Driver 1.57.0)
 ARG PLAYWRIGHT_GO_VERSION=v0.5700.1
+# 404 Hatasını çözen güncel Microsoft CDN adresi
+ENV PLAYWRIGHT_DRIVER_URL="https://playwright.download.prss.microsoft.com/dbuyiflzsi96/builds/driver/playwright-%s-%s.zip"
 
 RUN export PATH=$PATH:/usr/local/go/bin:/root/go/bin \
     && apt-get update \
@@ -31,7 +30,8 @@ RUN export PATH=$PATH:/usr/local/go/bin:/root/go/bin \
 FROM golang:1.26.5-trixie AS builder
 WORKDIR /app
 COPY . .
-# Sadece kodları derle, go.mod'a dokunma
+# go.sum imza hatasını ezmek için "tidy" geri eklendi
+RUN go mod tidy && go mod download
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /usr/bin/google-maps-scraper
 
 # Bake Turkey boundaries into the image
@@ -47,33 +47,15 @@ RUN mkdir -p /gmapsdata/geojson/tr/il /gmapsdata/geojson/tr/ilce \
 FROM debian:trixie-slim
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
 ENV PLAYWRIGHT_DRIVER_PATH=/opt/ms-playwright-go
-ENV PLAYWRIGHT_DOWNLOAD_HOST="https://playwright.download.prss.microsoft.com/dbuyiflzsi96"
+ENV PLAYWRIGHT_DRIVER_URL="https://playwright.download.prss.microsoft.com/dbuyiflzsi96/builds/driver/playwright-%s-%s.zip"
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    wget \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libdbus-1-3 \
-    libxkbcommon0 \
-    libatspi2.0-0 \
-    libx11-6 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates wget libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
+    libcups2 libdrm2 libdbus-1-3 libxkbcommon0 libatspi2.0-0 libx11-6 \
+    libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 libgbm1 \
+    libpango-1.0-0 libcairo2 libasound2 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY --from=playwright-deps /opt/browsers /opt/browsers
 COPY --from=playwright-deps /opt/ms-playwright-go /opt/ms-playwright-go
