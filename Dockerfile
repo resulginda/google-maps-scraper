@@ -4,11 +4,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
 ENV PLAYWRIGHT_DRIVER_PATH=/opt/ms-playwright-go
 ARG TARGETARCH
 
-# Scrapemate'in zorladığı ve Go'nun aradığı tam sürüm: v0.5700.1 (Driver 1.57.0)
-ARG PLAYWRIGHT_GO_VERSION=v0.5700.1
-# 404 Hatasını çözen güncel Microsoft CDN adresi
-ENV PLAYWRIGHT_DRIVER_URL="https://playwright.download.prss.microsoft.com/dbuyiflzsi96/builds/driver/playwright-%s-%s.zip"
-
+# Orijinal repodaki gibi Microsoft sunucularında var olan en güncel sürümü zorluyoruz
 RUN export PATH=$PATH:/usr/local/go/bin:/root/go/bin \
     && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl wget \
@@ -22,7 +18,7 @@ RUN export PATH=$PATH:/usr/local/go/bin:/root/go/bin \
     && rm "go1.26.5.linux-${GO_ARCH}.tar.gz" \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
-    && go install github.com/playwright-community/playwright-go/cmd/playwright@${PLAYWRIGHT_GO_VERSION} \
+    && go install github.com/playwright-community/playwright-go/cmd/playwright@latest \
     && mkdir -p /opt/browsers \
     && playwright install chromium --with-deps
 
@@ -30,8 +26,10 @@ RUN export PATH=$PATH:/usr/local/go/bin:/root/go/bin \
 FROM golang:1.26.5-trixie AS builder
 WORKDIR /app
 COPY . .
-# go.sum imza hatasını ezmek için "tidy" geri eklendi
-RUN go mod tidy && go mod download
+# KRİTİK ADIM: go.mod içindeki 404 veren 0.5700.1 sürümünü ezip en güncelini çekiyoruz
+RUN go get github.com/playwright-community/playwright-go@latest \
+    && go mod tidy \
+    && go mod download
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /usr/bin/google-maps-scraper
 
 # Bake Turkey boundaries into the image
@@ -47,7 +45,6 @@ RUN mkdir -p /gmapsdata/geojson/tr/il /gmapsdata/geojson/tr/ilce \
 FROM debian:trixie-slim
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
 ENV PLAYWRIGHT_DRIVER_PATH=/opt/ms-playwright-go
-ENV PLAYWRIGHT_DRIVER_URL="https://playwright.download.prss.microsoft.com/dbuyiflzsi96/builds/driver/playwright-%s-%s.zip"
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -72,4 +69,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
 
 ENTRYPOINT ["google-maps-scraper"]
-CMD ["-web", "-addr", ":8080", "-data-folder", "/gmapsdata"] 
+CMD ["-web", "-addr", ":8080", "-data-folder", "/gmapsdata"]
+ 
