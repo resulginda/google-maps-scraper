@@ -28,7 +28,11 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go mod tidy
+
+# KRİTİK ÇÖZÜM: Paket ismi uyuşmazlığını ortadan kaldıran Go replace kuralı
+RUN go mod edit -replace github.com/playwright-community/playwright-go=github.com/mxschmitt/playwright-go@v0.6100.0 \
+    && go mod tidy
+
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /usr/bin/google-maps-scraper
 
 # Final stage
@@ -69,4 +73,4 @@ RUN chmod -R 755 /opt/browsers \
 
 COPY --from=builder /usr/bin/google-maps-scraper /usr/bin/
 
-ENTRYPOINT ["google-maps-scraper"] 
+ENTRYPOINT ["google-maps-scraper"]
