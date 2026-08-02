@@ -29,8 +29,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 
-# KESİN ÇÖZÜM: İki farklı modül adı çakışmasını önleyen doğru replace kuralı
-RUN go mod edit -replace github.com/playwright-community/playwright-go=github.com/mxschmitt/playwright-go@v0.6100.0 \
+# KESİN ÇÖZÜM: Çakışan modül yollarını doğrudan mxschmitt tabanına eşitleyen replace kuralı
+RUN go mod edit -replace github.com/playwright-community/playwright-go=github.com/mxschmitt/playwright-go@${PLAYWRIGHT_GO_VERSION} \
+    && go mod edit -droprequire github.com/playwright-community/playwright-go \
     && go mod tidy
 
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /usr/bin/google-maps-scraper
@@ -73,4 +74,4 @@ RUN chmod -R 755 /opt/browsers \
 
 COPY --from=builder /usr/bin/google-maps-scraper /usr/bin/
 
-ENTRYPOINT ["google-maps-scraper"] 
+ENTRYPOINT ["google-maps-scraper"]
