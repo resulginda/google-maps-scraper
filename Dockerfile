@@ -28,6 +28,10 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+
+# KESİN ÇÖZÜM: Go modülünün paket bulamaması sorununu doğrudan mod dosyasına ekleyerek çözer
+RUN go get github.com/playwright-community/playwright-go@v0.6100.0
+
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /usr/bin/google-maps-scraper
 
 # Final stage
