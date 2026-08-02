@@ -15,9 +15,9 @@ RUN apt-get update \
 # Build stage
 FROM golang:1.26.2-trixie AS builder
 WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
 COPY . .
+# go.sum uyuşmazlığını otomatik çözmek için tidy & download ekledik
+RUN go mod tidy && go mod download
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /usr/bin/google-maps-scraper
 
 # Bake Turkey boundaries into the image (avoids runtime TLS timeout to ucdavis.edu).
@@ -77,3 +77,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
 ENTRYPOINT ["google-maps-scraper"]
 # Dokploy Dockerfile build: explicit web mode (no compose command override).
 CMD ["-web", "-addr", ":8080", "-data-folder", "/gmapsdata"]
+ 
