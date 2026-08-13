@@ -1,45 +1,40 @@
 # ============================================================
-# 1. PLAYWRIGHT + CHROMIUM
+# PLAYWRIGHT DEPENDENCIES
 # ============================================================
-FROM golang:1.26.2-trixie AS playwright-deps
+FROM ubuntu:20.04 AS playwright-deps
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
 ENV PLAYWRIGHT_DRIVER_PATH=/opt/ms-playwright-go
-ENV PLAYWRIGHT_DOWNLOAD_HOST=https://playwright.download.prss.microsoft.com/dbazure/download/playwright
+
+ARG TARGETARCH
+ARG PLAYWRIGHT_GO_VERSION=v0.6100.0
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
+        curl \
         wget \
-        libnss3 \
-        libnspr4 \
-        libatk1.0-0 \
-        libatk-bridge2.0-0 \
-        libcups2 \
-        libdrm2 \
-        libdbus-1-3 \
-        libxkbcommon0 \
-        libatspi2.0-0 \
-        libx11-6 \
-        libxcomposite1 \
-        libxdamage1 \
-        libxext6 \
-        libxfixes3 \
-        libxrandr2 \
-        libgbm1 \
-        libpango-1.0-0 \
-        libcairo2 \
-        libasound2 \
-    && rm -rf /var/lib/apt/lists/* \
+    && if [ "$TARGETARCH" = "arm64" ]; then \
+        GO_ARCH="arm64"; \
+    else \
+        GO_ARCH="amd64"; \
+    fi \
+    && wget -q "https://go.dev/dl/go1.26.5.linux-${GO_ARCH}.tar.gz" \
+    && tar -C /usr/local -xzf "go1.26.5.linux-${GO_ARCH}.tar.gz" \
+    && rm "go1.26.5.linux-${GO_ARCH}.tar.gz" \
+    && export PATH="/usr/local/go/bin:/root/go/bin:$PATH" \
+    && go version \
+    && go install github.com/mxschmitt/playwright-go/cmd/playwright@${PLAYWRIGHT_GO_VERSION} \
     && mkdir -p /opt/browsers /opt/ms-playwright-go \
-    && go install github.com/playwright-community/playwright-go/cmd/playwright@v0.5700.1 \
-    && playwright install chromium --with-deps
+    && playwright install chromium --with-deps \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# 2. GO BUILD
+# GO BUILD
 # ============================================================
-FROM golang:1.26.2-trixie AS builder
+FROM golang:1.26.5-trixie AS builder
 
 WORKDIR /app
 
@@ -49,39 +44,43 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build \
+RUN CGO_ENABLED=0 \
+    go build \
     -ldflags="-w -s" \
     -o /usr/bin/google-maps-scraper
 
 # ============================================================
-# 3. TURKEY GEOJSON
+# TURKEY GEOJSON
 # ============================================================
 FROM builder AS geojson-bake
 
 WORKDIR /app
 
-RUN mkdir -p /gmapsdata/geojson/tr/il \
-    /gmapsdata/geojson/tr/ilce \
-    && (for i in 1 2 3; do \
-        CGO_ENABLED=0 go run ./scripts/prepare-turkey-geojson/main.go /gmapsdata \
-        && exit 0; \
-        echo "geojson bake retry $i/3 in 45s..."; \
-        sleep 45; \
-    done; \
-    echo "geojson bake deferred to container startup")
+RUN mkdir -p \
+        /gmapsdata/geojson/tr/il \
+        /gmapsdata/geojson/tr/ilce \
+    && ( \
+        for i in 1 2 3; do \
+            CGO_ENABLED=0 \
+            go run ./scripts/prepare-turkey-geojson/main.go /gmapsdata \
+            && exit 0; \
+            echo "geojson bake retry $i/3 in 45s..."; \
+            sleep 45; \
+        done; \
+        echo "geojson bake deferred to container startup" \
+    )
 
 # ============================================================
-# 4. FINAL RUNTIME IMAGE
+# FINAL RUNTIME IMAGE
 # ============================================================
 FROM debian:trixie-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
 ENV PLAYWRIGHT_DRIVER_PATH=/opt/ms-playwright-go
-ENV PLAYWRIGHT_DOWNLOAD_HOST=https://playwright.download.prss.microsoft.com/dbazure/download/playwright
 
 # ------------------------------------------------------------
-# Chromium runtime dependencies
+# Chromium runtime libraries
 # ------------------------------------------------------------
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -107,12 +106,7 @@ RUN apt-get update \
         libcairo2 \
         libasound2 \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    \
-    # CRITICAL: verify the library really exists
-    && ldconfig \
-    && test -e /usr/lib/x86_64-linux-gnu/libxkbcommon.so.0 \
-    && ldconfig -p | grep -F "libxkbcommon.so.0"
+    && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------
 # Playwright browser + driver
@@ -120,24 +114,35 @@ RUN apt-get update \
 COPY --from=playwright-deps /opt/browsers /opt/browsers
 COPY --from=playwright-deps /opt/ms-playwright-go /opt/ms-playwright-go
 
-RUN chmod -R 755 /opt/browsers /opt/ms-playwright-go
+RUN chmod -R 755 \
+        /opt/browsers \
+        /opt/ms-playwright-go
 
 # ------------------------------------------------------------
 # Application
 # ------------------------------------------------------------
-COPY --from=builder /usr/bin/google-maps-scraper \
+COPY --from=builder \
+    /usr/bin/google-maps-scraper \
     /usr/bin/google-maps-scraper
 
-COPY --from=geojson-bake /gmapsdata/geojson \
+COPY --from=geojson-bake \
+    /gmapsdata/geojson \
     /gmapsdata/geojson
 
 # ------------------------------------------------------------
-# Final Chromium sanity check
+# IMPORTANT RUNTIME CHECKS
 # ------------------------------------------------------------
 RUN test -e /usr/lib/x86_64-linux-gnu/libxkbcommon.so.0 \
+    && test -e /usr/lib/x86_64-linux-gnu/libnss3.so \
     && test -d /opt/browsers \
-    && test -d /opt/ms-playwright-go
+    && test -d /opt/ms-playwright-go \
+    && echo "Chromium runtime libraries: OK" \
+    && echo "Playwright browsers: OK" \
+    && echo "Playwright driver: OK"
 
+# ------------------------------------------------------------
+# SERVER
+# ------------------------------------------------------------
 EXPOSE 8080
 
 HEALTHCHECK \
@@ -150,10 +155,4 @@ HEALTHCHECK \
 
 ENTRYPOINT ["google-maps-scraper"]
 
-CMD [
-    "-web",
-    "-addr",
-    ":8080",
-    "-data-folder",
-    "/gmapsdata"
-]
+CMD ["-web", "-addr", ":8080", "-data-folder", "/gmapsdata"]
