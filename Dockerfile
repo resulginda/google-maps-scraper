@@ -1,40 +1,50 @@
-# Browser + driver cache (same OS family as final debian:trixie-slim)
+# Playwright driver + Chromium cache
 FROM golang:1.26.2-trixie AS playwright-deps
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
+ENV PLAYWRIGHT_DRIVER_PATH=/opt/ms-playwright-go
+ENV PLAYWRIGHT_DOWNLOAD_HOST=https://playwright.download.prss.microsoft.com/dbazure/download/playwright
 
-# Pin CLI to the same major line as go.mod (avoid @latest drift vs library).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /opt/browsers /opt/ms-playwright-go \
     && go install github.com/playwright-community/playwright-go/cmd/playwright@v0.5700.1 \
-    && mkdir -p /opt/browsers \
-    && playwright install chromium --with-deps
+    && playwright install chromium --with-deps \
+    && test -f /opt/ms-playwright-go/package/cli.js \
+    && test -x /opt/ms-playwright-go/node \
+    && /opt/ms-playwright-go/node /opt/ms-playwright-go/package/cli.js --version | grep -F "1.57.0"
 
 # Build stage
 FROM golang:1.26.2-trixie AS builder
 WORKDIR /app
+
 COPY go.mod go.sum ./
 RUN go mod download
+
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o /usr/bin/google-maps-scraper
 
-# Bake Turkey boundaries into the image (avoids runtime TLS timeout to ucdavis.edu).
+# Bake Turkey boundaries into the image
 FROM builder AS geojson-bake
 WORKDIR /app
+
 RUN mkdir -p /gmapsdata/geojson/tr/il /gmapsdata/geojson/tr/ilce \
     && (for i in 1 2 3; do \
         CGO_ENABLED=0 go run ./scripts/prepare-turkey-geojson/main.go /gmapsdata && exit 0; \
         echo "geojson bake retry $i/3 in 45s..."; sleep 45; \
-    done; echo "geojson bake deferred to container startup")
+    done; \
+    echo "geojson bake deferred to container startup")
 
 # Final stage
 FROM debian:trixie-slim
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
-ENV PLAYWRIGHT_DRIVER_PATH=/opt
 
-# Install only the necessary dependencies in a single layer
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
+ENV PLAYWRIGHT_DRIVER_PATH=/opt/ms-playwright-go
+ENV PLAYWRIGHT_DOWNLOAD_HOST=https://playwright.download.prss.microsoft.com/dbazure/download/playwright
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     wget \
@@ -60,13 +70,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=playwright-deps /opt/ms-playwright-go /opt/ms-playwright-go
 COPY --from=playwright-deps /opt/browsers /opt/browsers
-COPY --from=playwright-deps /root/.cache/ms-playwright-go /opt/ms-playwright-go
 
-RUN chmod -R 755 /opt/browsers \
-    && chmod -R 755 /opt/ms-playwright-go
+RUN chmod -R 755 /opt/ms-playwright-go /opt/browsers \
+    && test -f /opt/ms-playwright-go/package/cli.js \
+    && test -x /opt/ms-playwright-go/node \
+    && /opt/ms-playwright-go/node /opt/ms-playwright-go/package/cli.js --version | grep -F "1.57.0"
 
-COPY --from=builder /usr/bin/google-maps-scraper /usr/bin/
+COPY --from=builder /usr/bin/google-maps-scraper /usr/bin/google-maps-scraper
 COPY --from=geojson-bake /gmapsdata/geojson /gmapsdata/geojson
 
 EXPOSE 8080
@@ -75,5 +87,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
 
 ENTRYPOINT ["google-maps-scraper"]
-# Dokploy Dockerfile build: explicit web mode (no compose command override).
-CMD ["-web", "-addr", ":8080", "-data-folder", "/gmapsdata"]
+CMD ["-web", "-addr", ":8080", "-data-folder", "/gmapsdata"] 
